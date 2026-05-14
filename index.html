@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Sistema Solar NASA 3D</title>
+<style>
+html, body {
+  margin: 0;
+  overflow: hidden;
+  background: black;
+}
+canvas { display: block; }
+</style>
+</head>
+<body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+
+// ESCENA
+const scene = new THREE.Scene();
+
+// CÁMARA
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(0, 40, 150);
+
+// RENDER
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+// CONTROLES
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// CARGADOR
+const loader = new THREE.TextureLoader();
+
+// 🌌 FONDO ESTRELLAS (estable)
+loader.load(
+  'https://threejs.org/examples/textures/galaxy_starfield.png',
+  function(texture){
+    const bg = new THREE.Mesh(
+      new THREE.SphereGeometry(1000, 64, 64),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.BackSide
+      })
+    );
+    scene.add(bg);
+  }
+);
+
+// ☀ SOL
+const sunTexture = loader.load('https://threejs.org/examples/textures/planets/sun.jpg');
+const sun = new THREE.Mesh(
+  new THREE.SphereGeometry(16, 64, 64),
+  new THREE.MeshBasicMaterial({ map: sunTexture })
+);
+scene.add(sun);
+
+// LUZ DEL SOL
+const sunLight = new THREE.PointLight(0xffffff, 2, 1000);
+scene.add(sunLight);
+
+// 🌍 FUNCIÓN CREAR PLANETA
+function createPlanet(size, textureUrl, distance) {
+
+  const texture = loader.load(textureUrl);
+
+  const planet = new THREE.Mesh(
+    new THREE.SphereGeometry(size, 64, 64),
+    new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 1
+    })
+  );
+
+  const pivot = new THREE.Object3D();
+  pivot.add(planet);
+  scene.add(pivot);
+
+  planet.position.x = distance;
+
+  return { mesh: planet, pivot: pivot };
+}
+
+// PLANETAS (texturas oficiales compatibles)
+const mercury = createPlanet(2, 'https://threejs.org/examples/textures/planets/mercury.jpg', 25);
+const venus   = createPlanet(3, 'https://threejs.org/examples/textures/planets/venus.jpg', 35);
+const earth   = createPlanet(3.5, 'https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg', 50);
+const mars    = createPlanet(2.5, 'https://threejs.org/examples/textures/planets/mars_1k_color.jpg', 65);
+const jupiter = createPlanet(8, 'https://threejs.org/examples/textures/planets/jupiter.jpg', 90);
+const saturn  = createPlanet(7, 'https://threejs.org/examples/textures/planets/saturn.jpg', 120);
+const uranus  = createPlanet(5, 'https://threejs.org/examples/textures/planets/uranus.jpg', 150);
+const neptune = createPlanet(5, 'https://threejs.org/examples/textures/planets/neptune.jpg', 180);
+
+// 🌙 LUNA
+const moonTexture = loader.load('https://threejs.org/examples/textures/planets/moon_1024.jpg');
+const moon = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 32, 32),
+  new THREE.MeshStandardMaterial({ map: moonTexture })
+);
+earth.mesh.add(moon);
+moon.position.x = 6;
+
+// 💫 CINTURÓN ASTEROIDES
+const asteroidGeometry = new THREE.SphereGeometry(0.4, 8, 8);
+const asteroidMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+
+for (let i = 0; i < 300; i++) {
+  const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+  const angle = Math.random() * Math.PI * 2;
+  const radius = 75 + Math.random() * 10;
+
+  asteroid.position.set(
+    Math.cos(angle) * radius,
+    (Math.random() - 0.5) * 2,
+    Math.sin(angle) * radius
+  );
+
+  scene.add(asteroid);
+}
+
+// 🪐 ANILLOS DE SATURNO
+const ringTexture = loader.load('https://threejs.org/examples/textures/planets/saturnringcolor.jpg');
+const ring = new THREE.Mesh(
+  new THREE.RingGeometry(9, 14, 64),
+  new THREE.MeshStandardMaterial({
+    map: ringTexture,
+    side: THREE.DoubleSide,
+    transparent: true
+  })
+);
+ring.rotation.x = Math.PI / 2;
+saturn.mesh.add(ring);
+
+// ANIMACIÓN
+function animate() {
+  requestAnimationFrame(animate);
+
+  mercury.pivot.rotation.y += 0.02;
+  venus.pivot.rotation.y += 0.015;
+  earth.pivot.rotation.y += 0.01;
+  mars.pivot.rotation.y += 0.008;
+  jupiter.pivot.rotation.y += 0.005;
+  saturn.pivot.rotation.y += 0.004;
+  uranus.pivot.rotation.y += 0.003;
+  neptune.pivot.rotation.y += 0.002;
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// RESPONSIVE
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+</script>
+</body>
+</html>
