@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sistema Solar con Lunas (Mejorado)</title>
+
+<style>
+body { margin: 0; overflow: hidden; background: #0a0a0a; }
+canvas { display: block; }
+
+#infoPanel{
+position: absolute;
+top: 20px;
+left: 20px;
+width: 360px;
+padding: 15px;
+background: rgba(0,0,0,0.75);
+color: white;
+font-family: Arial;
+border: 1px solid white;
+display: none;
+z-index: 999;
+}
+
+/* ================= PORTADA ================= */
+#portada{
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: black;
+z-index: 2000;
+}
+
+#portada img{
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -60%);
+max-width: 80%;
+border-radius: 10px;
+box-shadow: 0 0 30px rgba(255,255,255,0.3);
+}
+
+#portada button {
+position: absolute;
+top: 65%;
+left: 50%;
+transform: translate(-50%, -50%);
+padding: 15px 40px;
+font-size: 18px;
+border: none;
+cursor: pointer;
+background: white;
+color: black;
+font-weight: bold;
+border-radius: 8px;
+transition: 0.3s;
+}
+
+#portada button:hover{
+background: #ddd;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ================= PORTADA ================= -->
+<div id="portada">
+  <img src="https://supercurioso.com/wp-content/uploads/2018/05/shutterstock_306306104hyu.jpg">
+  <button id="btnEntrar">VIAJE CÓSMICO</button>
+</div>
+
+<div id="infoPanel">
+  <h2 id="infoTitle"></h2>
+  <p id="infoText"></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+
+// =================== ESCENA ===================
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 20000);
+camera.position.set(0, 200, 700);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxDistance = 5000;
+controls.minDistance = 50;
+
+// ⭐ FIX 1: liberar control al mover cámara manualmente
+controls.addEventListener("start", () => {
+target = null;
+resetting = false;
+});
+
+// =================== PANEL ===================
+const infoPanel = document.getElementById("infoPanel");
+const infoTitle = document.getElementById("infoTitle");
+const infoText = document.getElementById("infoText");
+
+// =================== RESET CONTROL ===================
+let target = null;
+let resetting = false;
+
+const startPosition = camera.position.clone();
+const startTarget = new THREE.Vector3(0,0,0);
+
+// =================== LUCES ===================
+scene.add(new THREE.PointLight(0xffffff, 2, 10000));
+scene.add(new THREE.AmbientLight(0x222222));
+
+const sunLight = new THREE.PointLight(0xffffff, 2.3, 20000);
+scene.add(sunLight);
+
+// =================== ESTRELLAS ===================
+function createStars(count, spread){
+const geo = new THREE.BufferGeometry();
+const vertices = [];
+
+for(let i=0;i<count;i++){
+vertices.push(
+(Math.random()-0.5)*spread,
+(Math.random()-0.5)*spread,
+(Math.random()-0.5)*spread
+);
+}
+
+geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices,3));
+
+const mat = new THREE.PointsMaterial({
+color: 0xffffff,
+size: 1.0,
+opacity: 0.35,
+transparent: true
+});
+
+scene.add(new THREE.Points(geo, mat));
+}
+createStars(5000, 12000);
+
+// =================== POLVO CÓSMICO MEJORADO ===================
+function createSpaceDust(count, spread){
+
+const geo = new THREE.BufferGeometry();
+const vertices = [];
+
+for(let i=0;i<count;i++){
+vertices.push(
+(Math.random()-0.5)*spread,
+(Math.random()-0.5)*spread * 0.6, // más plano tipo galaxia
+(Math.random()-0.5)*spread
+);
+}
+
+geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices,3));
+
+const mat = new THREE.PointsMaterial({
+color: 0xffffff,
+size: 4,
+opacity: 0.05,
+transparent: true,
+depthWrite: false
+});
+
+const dust = new THREE.Points(geo, mat);
+scene.add(dust);
+
+// 🔥 movimiento lento
+dust.userData = { rotationSpeed: 0.00005 };
+spaceDustObjects.push(dust);
+}
+
+// =================== TEXTURA ===================
+function createPlanetTexture(c1,c2,c3,c4){
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 512;
+const ctx = canvas.getContext('2d');
+
+const gradient = ctx.createRadialGradient(256,256,20,256,256,280);
+gradient.addColorStop(0,c1);
+gradient.addColorStop(0.4,c2);
+gradient.addColorStop(0.7,c3);
+gradient.addColorStop(1,c4 || c2);
+
+ctx.fillStyle = gradient;
+ctx.fillRect(0,0,512,512);
+
+return new THREE.CanvasTexture(canvas);
+}
+
+function createLabel(text){
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 256;
+
+const ctx = canvas.getContext('2d');
+
+// fondo transparente
+ctx.clearRect(0,0,512,256);
+
+// texto grande y visible
+ctx.font = "Bold 48px Arial";
+ctx.textAlign = "center";
+ctx.textBaseline = "middle";
+
+// blanco brillante
+ctx.fillStyle = "rgba(255,255,255,0.95)";
+
+ctx.fillText(text, 256, 130);
+
+const texture = new THREE.CanvasTexture(canvas);
+
+const sprite = new THREE.Sprite(
+new THREE.SpriteMaterial({
+map: texture,
+transparent: true
+})
+);
+
+// tamaño visible en el espacio
+sprite.scale.set(140, 70, 1);
+
+return sprite;
+}
+
+// =================== ÓRBITAS ===================
+function createOrbit(radius){
+const curve = new THREE.EllipseCurve(0,0,radius,radius,0,2*Math.PI,false,0);
+const points = curve.getPoints(200);
+const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+const material = new THREE.LineBasicMaterial({
+color: 0xffffff,
+transparent: true,
+opacity: 0.15
+});
+
+const orbit = new THREE.LineLoop(geometry, material);
+orbit.rotation.x = Math.PI/2;
+scene.add(orbit);
+}
+
+// =================== PLANETAS ===================
+function createPlanet(size,distance,speed,c1,c2,c3,c4){
+
+const mesh = new THREE.Mesh(
+new THREE.SphereGeometry(size,64,64),
+new THREE.MeshStandardMaterial({
+map:createPlanetTexture(c1,c2,c3,c4),
+roughness: 1,
+metalness: 0
+})
+);
+
+const pivot = new THREE.Object3D();
+scene.add(pivot);
+pivot.add(mesh);
+mesh.position.x = distance;
+
+return {mesh,pivot,speed};
+}
+
+// =================== SOL ===================
+const sun = new THREE.Mesh(
+new THREE.SphereGeometry(40,64,64),
+new THREE.MeshBasicMaterial({
+map:createPlanetTexture("#fff7a8","#ffb300","#ff6a00","#ff2a00")
+})
+);
+scene.add(sun);
+
+const sunLabel = createLabel("SOL");
+scene.add(sunLabel);
+
+// =================== PLANETAS ===================
+const planets = [];
+
+planets.push(createPlanet(5,70,0.01,"#b5b5b5","#8a8a8a","#5c5c5c","#2b2b2b"));
+planets.push(createPlanet(8,100,0.008,"#f6d8a8","#d9a066","#a36b2c","#5a3418"));
+planets.push(createPlanet(
+9,140,0.006,
+"#1e90ff","#2ecc71","#0b3d91","#001b44"));
+planets.push(createPlanet(
+7,180,0.005,
+"#ff7b5a",
+"#c0392b",
+"#7b241c",
+"#2a0b07"
+));
+planets.push(createPlanet(
+20,250,0.003,
+"#f8e3c4",
+"#d6a56a",
+"#a8743a",
+"#6b3f1c"
+));
+// ===== JÚPITER REALISMO =====
+const jupiter = planets[4].mesh;
+
+// gran mancha roja
+const redSpot = new THREE.Mesh(
+new THREE.SphereGeometry(2.2, 16, 16),
+new THREE.MeshBasicMaterial({ color: 0xcc4433 })
+);
+
+redSpot.position.set(6, 1.5, 4);
+jupiter.add(redSpot);
+
+// bandas visibles (simulación simple)
+for(let i=0;i<5;i++){
+const band = new THREE.Mesh(
+new THREE.SphereGeometry(20.1, 32, 32),
+new THREE.MeshBasicMaterial({
+wireframe: true,
+color: 0x8b5a2b,
+transparent: true,
+opacity: 0.08
+})
+);
+band.rotation.y = i * 0.4;
+jupiter.add(band)};
+
+planets.push(createPlanet(
+18,330,0.002,
+"#fff1c2",
+"#e6d08a",
+"#c9a94a",
+"#8a6b1a"
+));
+
+// ===== SATURNO REALISMO =====
+const saturn = planets[5].mesh;
+
+// inclinación real (muy importante)
+saturn.rotation.z = 0.45;
+
+// anillos dobles (más realismo visual)
+const ringGeometry = new THREE.RingGeometry(30, 60, 64);
+
+const ringMaterial = new THREE.MeshBasicMaterial({
+color: 0xd9c58a,
+side: THREE.DoubleSide,
+transparent: true,
+opacity: 0.6
+});
+
+const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+ring.rotation.x = Math.PI / 2;
+saturn.add(ring);
+
+planets.push(createPlanet(14,400,0.0015,"#7ec8ff","#4aa3ff","#1b6edc","#0b2f6b"));
+planets.push(createPlanet(
+13,460,0.001,
+"#6aa9ff",
+"#2f6fff",
+"#0b2a8a",
+"#020b2d"
+));
+
+const planetNames = ["MERCURIO","VENUS","TIERRA","MARTE","JÚPITER","SATURNO","URANO","NEPTUNO"];
+
+planets.forEach((p, i) => {
+const label = createLabel(planetNames[i]);
+scene.add(label);
+p.label = label;
+});
+
+planets.forEach(p => createOrbit(p.mesh.position.x));
+
+// =================== LUNAS ===================
+const moons = [];
+
+function createMoon(planetIndex,size,distance,speed,color){
+
+const moon = new THREE.Mesh(
+new THREE.SphereGeometry(size,16,16),
+new THREE.MeshStandardMaterial({color})
+);
+
+const pivot = new THREE.Object3D();
+planets[planetIndex].mesh.add(pivot);
+pivot.add(moon);
+
+moon.position.x = distance;
+
+moon.position.y = (Math.random() - 0.5) * 2;
+
+moons.push({moon,pivot,speed});
+}
+
+createMoon(2,2,18,0.02,0xcccccc);
+
+createMoon(3, 1.2, 10, 0.03, 0x999999);
+createMoon(3, 0.8, 14, 0.02, 0x777777);
+
+createMoon(4, 2.5, 22, 0.025, 0xdddddd);
+createMoon(4, 2.0, 28, 0.02, 0xbbbbbb);
+createMoon(4, 1.8, 35, 0.018, 0xaaaaaa);
+createMoon(4, 1.5, 42, 0.015, 0x999999);
+
+createMoon(5, 3.0, 30, 0.02, 0xffddaa);
+createMoon(5, 2.2, 40, 0.017, 0xcccccc);
+createMoon(5, 1.8, 48, 0.015, 0xaaaaaa);
+
+createMoon(6, 2.0, 26, 0.018, 0xaadfff);
+createMoon(6, 1.5, 34, 0.015, 0x88bbff);
+
+createMoon(7, 2.2, 28, 0.02, 0x99bbff);
+createMoon(7, 1.6, 36, 0.016, 0x6699ff);
+
+// =================== ASTEROIDES ===================
+const asteroids = [];
+
+function createAsteroidBelt(inner,outer,count,height){
+
+const colors = [0x5a4a3a,0x3d3d3d,0x6a5a4a,0x2f2f2f,0x4a3b2a];
+
+for(let i=0;i<count;i++){
+
+const size = Math.random()*2.2+0.8;
+
+const mesh = new THREE.Mesh(
+new THREE.SphereGeometry(size,8,8),
+new THREE.MeshStandardMaterial({color:colors[Math.floor(Math.random()*colors.length)]})
+);
+
+scene.add(mesh);
+
+asteroids.push({
+mesh,
+angle:Math.random()*Math.PI*2,
+radius:inner + Math.random()*(outer-inner),
+speed:Math.random()*0.0005+0.0001,
+y:(Math.random()-0.5)*height
+});
+}
+}
+
+createAsteroidBelt(200,230,800,10);
+createAsteroidBelt(250,260,400,20);
+createAsteroidBelt(500,650,1500,50);
+createAsteroidBelt(700,1200,1000,300);
+createAsteroidBelt(1500,3000,2000,2000);
+
+// =================== RAYCAST ===================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// =================== CLICK ===================
+window.addEventListener("click",(e)=>{
+
+mouse.x = (e.clientX/window.innerWidth)*2-1;
+mouse.y = -(e.clientY/window.innerHeight)*2+1;
+
+raycaster.setFromCamera(mouse,camera);
+
+const hits = raycaster.intersectObjects([...planets.map(p=>p.mesh), sun],true);
+
+if(hits.length){
+
+const obj = hits[0].object;
+
+// =================== SOL ===================
+if(obj === sun || obj.parent === sun){
+
+infoPanel.style.display = "block";
+infoTitle.innerText = "SOL";
+
+infoText.innerText = `
+SOL (Estrella tipo G2V):
+
+- Tipo: Enana amarilla
+- Edad: ~4.6 mil millones de años
+- Diámetro: ~1.39 millones km
+- Masa: 99.86% de todo el Sistema Solar
+- Temperatura superficie: ~5,500°C
+- Núcleo: ~15 millones °C
+
+COMPOSICIÓN:
+- 74% Hidrógeno
+- 24% Helio
+- 2% elementos pesados
+
+CARACTERÍSTICAS:
+- Produce energía por fusión nuclear (H → He)
+- Tarda ~25 días en rotar en el ecuador
+- Orbita alrededor de la Vía Láctea (~225 millones de años por vuelta)
+- Fuente principal de luz y energía de la Tierra
+- Genera viento solar (partículas cargadas)
+
+IMPORTANCIA:
+- Controla el clima terrestre
+- Permite la fotosíntesis
+- Mantiene el equilibrio gravitacional del sistema solar
+`;
+
+target = sun;
+return;
+}
+
+// =================== PLANETAS ===================
+const planetIndex = planets.findIndex(
+p => p.mesh === obj || p.mesh.children.includes(obj)
+);
+
+const names = ["MERCURIO","VENUS","TIERRA","MARTE","JÚPITER","SATURNO","URANO","NEPTUNO"];
+
+const planetInfo = [
+
+`MERCURIO:
+
+- Planeta más cercano al Sol
+- Sin atmósfera significativa
+- Temperaturas extremas: -180°C a 430°C
+- Superficie llena de cráteres (similar a la Luna)
+- Un día dura 176 días terrestres
+- Un año dura 88 días terrestres
+- No tiene lunas
+- Núcleo metálico muy grande
+- Gravedad: 38% de la Tierra`,
+
+`VENUS:
+
+- Tamaño similar a la Tierra
+- Atmósfera: 96% CO₂
+- Presión atmosférica: 92 veces la Tierra
+- Temperatura media: ~465°C (más caliente del sistema solar)
+- Efecto invernadero extremo
+- Gira en sentido contrario (rotación retrógrada)
+- Un día dura más que su año
+- No tiene lunas
+- Superficie volcánica`,
+
+`TIERRA:
+
+- Único planeta con vida confirmada
+- 71% cubierta de agua
+- Atmósfera: nitrógeno (78%) y oxígeno (21%)
+- Una luna natural
+- Campo magnético protector
+- Temperatura media: ~15°C
+- Un año: 365 días
+- Rotación: 24 horas
+- Capas: corteza, manto, núcleo
+- Actividad tectónica activa`,
+
+`MARTE:
+
+- “Planeta rojo” por óxido de hierro
+- Atmósfera muy delgada (CO₂)
+- Temperaturas: -125°C a 20°C
+- Tiene casquetes polares de hielo
+- Olympus Mons: volcán más grande del sistema solar
+- Valles enormes (Valles Marineris)
+- Dos lunas: Fobos y Deimos
+- Posible evidencia de agua antigua
+- Un día similar al de la Tierra (24h 37m)`,
+
+`JÚPITER:
+
+- Planeta más grande del sistema solar
+- Gigante gaseoso (hidrógeno y helio)
+- Gran Mancha Roja (tormenta gigante)
+- Más de 90 lunas conocidas
+- Campo magnético extremadamente fuerte
+- Anillos débiles
+- Un día: ~10 horas (muy rápido)
+- Un año: 12 años terrestres
+- Actúa como “escudo” del sistema solar`,
+
+`SATURNO:
+
+- Famoso por sus anillos visibles
+- Gigante gaseoso
+- Anillos formados por hielo y roca
+- Menor densidad que el agua
+- Más de 80 lunas
+- Titán: luna con atmósfera densa
+- Vientos extremadamente fuertes
+- Un día: ~10.7 horas
+- Un año: ~29 años terrestres`,
+
+`URANO:
+
+- Gigante helado
+- Color azul verdoso por metano
+- Eje de rotación inclinado casi 98°
+- “Rueda” alrededor del Sol
+- Temperaturas: ~-224°C
+- 27 lunas conocidas
+- Anillos débiles
+- Vientos muy rápidos
+- Descubierto en 1781`,
+
+`NEPTUNO:
+
+- Planeta más lejano del sistema solar
+- Gigante helado
+- Vientos más rápidos del sistema solar (~2,000 km/h)
+- Color azul intenso por metano
+- 14 lunas conocidas
+- Tritón: luna más grande e importante
+- Temperatura: ~-214°C
+- Un año: 165 años terrestres
+- Campo gravitacional fuerte`
+];
+
+if(planetIndex !== -1){
+
+infoPanel.style.display = "block";
+infoTitle.innerText = names[planetIndex];
+infoText.innerText = planetInfo[planetIndex];
+
+target = planets[planetIndex].mesh;
+}
+}
+});
+
+// =================== DOBLE CLICK ===================
+window.addEventListener("dblclick",()=>{
+
+target = null;
+infoPanel.style.display = "none";
+resetting = true;
+
+});
+
+// =================== ANIMACIÓN ===================
+function animate(){
+requestAnimationFrame(animate);
+
+sun.rotation.y += 0.001;
+sunLight.position.copy(sun.position);
+
+const sunPos = new THREE.Vector3();
+sun.getWorldPosition(sunPos);
+sunLabel.position.set(sunPos.x, sunPos.y + 60, sunPos.z);
+
+planets.forEach(p=>{
+p.pivot.rotation.y += p.speed;
+p.mesh.rotation.y += 0.01; // giro propio constante
+});
+
+planets.forEach(p => {
+const pos = new THREE.Vector3();
+p.mesh.getWorldPosition(pos);
+
+if(p.label){
+p.label.position.set(pos.x, pos.y + 30, pos.z);
+}
+});
+
+moons.forEach(m=>{
+m.pivot.rotation.y += m.speed;
+m.moon.rotation.y += 0.02;
+});
+
+asteroids.forEach(a=>{
+a.angle += a.speed;
+a.mesh.position.x = Math.cos(a.angle)*a.radius;
+a.mesh.position.z = Math.sin(a.angle)*a.radius;
+a.mesh.position.y = a.y;
+});
+
+// =================== FOLLOW ===================
+if(target && !resetting){
+
+const pos = new THREE.Vector3();
+target.getWorldPosition(pos);
+
+camera.position.lerp(
+new THREE.Vector3(pos.x+80,pos.y+40,pos.z+140),
+0.08
+);
+
+controls.target.lerp(pos,0.08);
+}
+
+// =================== RESET FIX FINAL ===================
+if(resetting){
+
+camera.position.lerp(startPosition,0.08);
+controls.target.lerp(startTarget,0.08);
+
+if(camera.position.distanceTo(startPosition) < 1){
+
+resetting = false;
+
+// ⭐ FIX 2: restaurar control completamente
+controls.target.copy(startTarget);
+controls.update();
+}
+}
+
+controls.update();
+renderer.render(scene,camera);
+}
+
+animate();
+
+window.addEventListener("resize",()=>{
+camera.aspect = window.innerWidth/window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+</script>
+
+<script>
+document.getElementById("btnEntrar").addEventListener("click", function(){
+  document.getElementById("portada").style.display = "none";
+});
+</script>
+
+</body>
+</html>
